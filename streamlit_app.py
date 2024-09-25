@@ -1,27 +1,19 @@
 import streamlit as st
-from openai import OpenAI
+import requests
 
 # Show title and description.
 st.title("💬 Chatbot")
 st.write(
-    "This is a simple chatbot that uses OpenAI's GPT-3.5 model to generate responses. "
-    "To use this app, you need to provide an OpenAI API key, which you can get [here](https://platform.openai.com/account/api-keys). "
-    "You can also learn how to build this app step by step by [following our tutorial](https://docs.streamlit.io/develop/tutorials/llms/build-conversational-apps)."
+    "This is a simple chatbot that uses the LLaMA model to generate responses. "
+    "To use this app, ensure you have a running LLaMA API server."
 )
 
-# Ask user for their OpenAI API key via `st.text_input`.
-# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
-# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
-openai_api_key = st.text_input("OpenAI API Key", type="password")
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
+# Ask user for the LLaMA API endpoint.
+llama_api_url = st.text_input("LLaMA API URL", placeholder="http://localhost:5000/chat")
+if not llama_api_url:
+    st.info("Please provide your LLaMA API URL to continue.", icon="🗝️")
 else:
-
-    # Create an OpenAI client.
-    client = OpenAI(api_key=openai_api_key)
-
-    # Create a session state variable to store the chat messages. This ensures that the
-    # messages persist across reruns.
+    # Create a session state variable to store the chat messages.
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
@@ -30,8 +22,7 @@ else:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Create a chat input field to allow the user to enter a message. This will display
-    # automatically at the bottom of the page.
+    # Create a chat input field to allow the user to enter a message.
     if prompt := st.chat_input("What is up?"):
 
         # Store and display the current prompt.
@@ -39,18 +30,15 @@ else:
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Generate a response using the OpenAI API.
-        stream = client.chat.completions.create(
-            model="gpt-3.5-turbo",
-            messages=[
-                {"role": m["role"], "content": m["content"]}
-                for m in st.session_state.messages
-            ],
-            stream=True,
-        )
+        # Generate a response using the LLaMA API.
+        response = requests.post(llama_api_url, json={"messages": st.session_state.messages})
 
-        # Stream the response to the chat using `st.write_stream`, then store it in 
-        # session state.
-        with st.chat_message("assistant"):
-            response = st.write_stream(stream)
-        st.session_state.messages.append({"role": "assistant", "content": response})
+        if response.status_code == 200:
+            assistant_message = response.json().get("response")
+            st.session_state.messages.append({"role": "assistant", "content": assistant_message})
+
+            # Display the assistant's response.
+            with st.chat_message("assistant"):
+                st.markdown(assistant_message)
+        else:
+            st.error("Error while communicating with the LLaMA API.")
